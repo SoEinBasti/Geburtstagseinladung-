@@ -1,5 +1,5 @@
-// Version 1.3
-// Deutsche Uebersetzung + Namen (Thea laedt Emilia ein)
+// Version 1.5
+// Deutsche Uebersetzung + Namen (Thea laedt Emilia ein) + Intro-Feuerwerk + Feuerwerk-Finale
 // Hinweis: HD44780-Display kann keine Umlaute -> bewusst ae/oe/ue/ss verwendet
 //
 // Langer Druck (20 Sekunden) im Highscore-Screen = Loescht den Highscore
@@ -86,9 +86,9 @@ const char* invPage1L1     = "Einladung zur   ";
 const char* invPage1L2     = "Geburtstagsparty";
 const char* invPage2Name1  = "Von: Thea       "; // Seite 2, Zustand A oben
 const char* invPage2Name2  = "Fuer: Emilia    "; // Seite 2, Zustand B oben
-const char* invPage2Name1B = "an Dich! :-)    "; //           Zustand A unten
+const char* invPage2Name1B = "<3 <3 <3        "; //           Zustand A unten
 const char* invPage2Name2B = "<3 <3 <3        "; //           Zustand B unten
-const char* invPage3Date   = "TT.MM. um HH:MM "; // TODO: echtes Datum + Uhrzeit
+const char* invPage3Date   = "25.08. um 08:00 "; // TODO: echtes Datum + Uhrzeit
 const char* invPage3Scroll = "      Wir holen Dich ab!   "; // Lauftext
 const char* invPage4L1     = "Wir gehen ins   ";
 const char* invPage4L2     = "SCHWIMMBAD      "; // TODO: Ort anpassen falls anders
@@ -96,9 +96,9 @@ const char* invPage5L1     = "Badesachen      ";
 const char* invPage5L2Show = "NICHT vergessen!"; // Blink-Effekt (sichtbar)
 const char* invPage5L2Hide = "      vergessen!"; // Blink-Effekt (versteckt)
 const char* invPage6L1     = "Endet gegen     ";
-const char* invPage6L2     = "HH:MM Uhr       "; // TODO: echte End-Uhrzeit
+const char* invPage6L2     = "14:00 Uhr       "; // TODO: echte End-Uhrzeit
 const char* invPage7L1     = "Bitte Zusage bis";
-const char* invPage7L2     = "TT.MM.          "; // TODO: echte Zusage-Frist
+const char* invPage7L2     = "10.08.          "; // TODO: echte Zusage-Frist
 
 
 // =====================================================================
@@ -114,6 +114,10 @@ byte cactus1Sprite[8] = { B00000, B00100, B10100, B10101, B11101, B00111, B00100
 byte cactus2Sprite[8] = { B00100, B01110, B00100, B00100, B01110, B00100, B00100, B00100 };
 byte rocketSprite[8]  = { B00000, B00100, B01110, B01010, B01010, B11111, B10101, B00000 };
 byte bombSprite[8]    = { B00010, B00100, B01110, B11111, B11111, B11111, B01110, B00000 };
+// Feuerwerk-Sprites (Slots 5-7)
+byte fwTrail[8]       = { B00000, B00100, B00100, B00100, B00100, B00100, B00000, B00000 }; // Aufsteigende Rakete
+byte fwBurst[8]       = { B00100, B10101, B01110, B11011, B01110, B10101, B00100, B00000 }; // Explosions-Stern
+byte fwSpark[8]       = { B00000, B00100, B00000, B01010, B00000, B00100, B00000, B00000 }; // Verstreute Funken
 
 // --- GLOBAL VARIABLES ---
 int gameMode = 0;          // 0: Invite, 1: Start, 2: Play, 3: LevelUp, 4: GameOver, 5: Highscore, 6-9: EasterEgg
@@ -206,6 +210,9 @@ void setup() {
   lcd.createChar(2, cactus2Sprite);
   lcd.createChar(3, rocketSprite);
   lcd.createChar(4, bombSprite);
+  lcd.createChar(5, fwTrail);
+  lcd.createChar(6, fwBurst);
+  lcd.createChar(7, fwSpark);
 
   // Seed random generator with analog noise
   randomSeed(analogRead(0));
@@ -217,6 +224,7 @@ void setup() {
   if (bestLevel == 255) bestLevel = 1;
 
   playMarioIntro();
+  showIntro();   // Feuerwerk + "Thea feiert Geburtstag!" vor der Einladung
 }
 
 // =====================================================================
@@ -468,12 +476,14 @@ void showHighscorePage() {
 
 void showGameOver() {
   lcd.clear();
+  bool newRecord = false;
   if (score > highscore) {
     lcd.print(txtNewRecord);
     highscore = score;
     bestLevel = currentLevel;
     EEPROM.write(0, highscore);
     EEPROM.write(1, bestLevel);
+    newRecord = true;
   } else {
     lcd.print(txtGameOver);
   }
@@ -484,6 +494,10 @@ void showGameOver() {
 
   tone(buzzerPin, 150, 600);
   delay(1500);
+
+  // Bei neuem Rekord: Feuerwerk als Belohnung
+  if (newRecord) showFireworks();
+
   invitationPage = 0;
   gameMode = 1;
 }
@@ -618,6 +632,81 @@ void eeResult() {
 }
 
 // =====================================================================
+// --- FIREWORKS ANIMATION (Einladungs-Finale) ---
+// =====================================================================
+
+// Eine einzelne Rakete: steigt in der Spalte 'col' auf und zerplatzt oben.
+void launchFirework(int col) {
+  // Aufstieg: Rakete wandert von unten (Zeile 1) nach oben (Zeile 0)
+  for (int row = 1; row >= 0; row--) {
+    lcd.setCursor(col, row);
+    lcd.write(byte(5));                       // Raketen-Trail
+    tone(buzzerPin, 400 + (1 - row) * 600, 60); // Pfeifton, steigt beim Hochfliegen
+    delay(120);
+    lcd.setCursor(col, row);
+    lcd.print(" ");                           // alte Position wieder loeschen
+  }
+
+  // Explosion oben
+  lcd.setCursor(col, 0); lcd.write(byte(6));  // grosser Stern
+  if (col - 1 >= 0) { lcd.setCursor(col - 1, 0); lcd.write(byte(7)); } // Funken links
+  if (col + 1 < 16) { lcd.setCursor(col + 1, 0); lcd.write(byte(7)); } // Funken rechts
+  lcd.setCursor(col, 1); lcd.write(byte(7));  // Funken darunter
+  tone(buzzerPin, 200, 150);                  // "Plopp"
+  delay(220);
+
+  // Explosion weitet sich aus
+  if (col - 2 >= 0) { lcd.setCursor(col - 2, 0); lcd.print("."); }
+  if (col + 2 < 16) { lcd.setCursor(col + 2, 0); lcd.print("."); }
+  if (col - 1 >= 0) { lcd.setCursor(col - 1, 1); lcd.write(byte(7)); }
+  if (col + 1 < 16) { lcd.setCursor(col + 1, 1); lcd.write(byte(7)); }
+  delay(220);
+
+  // Ausblenden
+  lcd.setCursor(0, 0); lcd.print("                ");
+  lcd.setCursor(0, 1); lcd.print("                ");
+}
+
+// Komplette Feuerwerks-Show mit Abschlussbotschaft.
+void showFireworks() {
+  lcd.clear();
+  int cols[] = {4, 11, 8};                    // Raketen nacheinander an 3 Spalten
+  for (int i = 0; i < 3; i++) launchFirework(cols[i]);
+
+  // Zwischen-Botschaft mit Fanfare
+  lcd.clear();
+  lcd.setCursor(0, 0); lcd.print("  Alles Gute!   ");
+  lcd.setCursor(0, 1); lcd.print(" *  .  *  +  *  ");
+  playVictoryJingle();
+  delay(400);
+
+  // Grosses Finale: zwei Raketen + Triumph-Melodie
+  launchFirework(3);
+  launchFirework(12);
+  lcd.clear();
+  lcd.setCursor(0, 0); lcd.print("   Fuer Dich    ");
+  lcd.setCursor(0, 1); lcd.print("    Emilia!     ");
+  playPokemonTriumph();
+  delay(1800);
+  lcd.clear();
+}
+
+// Start-Sequenz: kurzes Feuerwerk zur Begruessung, dann die Ankuendigung.
+// Wird einmalig in setup() aufgerufen, bevor die Einladung startet.
+void showIntro() {
+  lcd.clear();
+  int cols[] = {4, 11, 8};                    // drei Begruessungs-Raketen
+  for (int i = 0; i < 3; i++) launchFirework(cols[i]);
+
+  lcd.clear();
+  lcd.setCursor(0, 0); lcd.print("Thea feiert     ");
+  lcd.setCursor(0, 1); lcd.print("Geburtstag!     ");
+  playVictoryJingle();
+  delay(2500);
+  lcd.clear();
+}
+
+// =====================================================================
 // --- INVITATION LOGIC ---
 // =====================================================================
 void showInvitation() {
@@ -669,7 +758,7 @@ void showInvitation() {
     tone(buzzerPin, 1000, 50);
     invitationPage++;
     lcd.clear();
-    if (invitationPage > 7) gameMode = 1;
+    if (invitationPage > 7) { showFireworks(); gameMode = 1; }
     delay(300);
   }
 }
