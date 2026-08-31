@@ -1,11 +1,12 @@
-// Version 2.0
+// Version 2.1
 // Namen/Alter zentral (HOST/GUEST/AGE) + Herz-Sprite + Alters-Seite + WhatsApp-Kontakt + persoenliche Laufschrift
 // Intro-Feuerwerk + Highscore-Feuerwerk endet mit Easter-Egg-Hinweis (Laufschrift)
+// Easter Egg: "Sternschnuppe fangen" (Timing-Spiel, Wunsch frei) statt Bombe
 // Highscore wird bei jedem Flash zurueckgesetzt (Build-Kennung in EEPROM 2-3)
 // Hinweis: HD44780-Display kann keine Umlaute -> bewusst ae/oe/ue/ss verwendet
 //
 // Langer Druck (20 Sekunden) im Highscore-Screen = Loescht den Highscore
-// Langer Druck (2 Sekunden) im Dino-Run-Screen = Geheim-Modus (Bombe entschaerfen)
+// Langer Druck (2 Sekunden) im Dino-Run-Screen = Geheim-Modus (Sternschnuppe fangen)
 //
 // Hardware Setup:
 // Arduino Nano V3 Clone
@@ -43,6 +44,9 @@
 #define GUEST  "Emilia"    // eingeladener Gast
 #define AGE    "9"         // Alter, das gefeiert wird
 
+// Trefferfenster fuer die Sternschnuppe (ms Abweichung, die noch als Erfolg zaehlt)
+#define CATCH_TOLERANCE 650
+
 // Hauptspiel & Menues
 const char* txtTitle       = "   DINO RUN   ";
 // Easter-Egg-Hinweis - erscheint als Belohnung im Highscore-Feuerwerk (Laufschrift)
@@ -58,34 +62,34 @@ const char* txtGameOver    = "GAME OVER!      ";
 const char* txtScoreShort  = "P:";
 const char* txtLevelShort  = " L:";
 
-// Easter Egg (Bombe entschaerfen)
-const char* eeInfo1L1      = "MISSION INFO    ";
-const char* eeInfo1L2      = "GEHEIM GEFUNDEN!";
-const char* eeInfo2L1      = "Eine Bombe wurde";
-const char* eeInfo2L2      = "entdeckt!   ";    // Danach folgt das Bomben-Icon
-const char* eeInfo3L1      = "Entschaerfe sie ";
-const char* eeInfo3L2      = "genau im Timing!";
-const char* eeInfo4L1      = "Druecke genau im";
-const char* eeInfo4L2      = "richtigen Moment";
-const char* eePrepL1       = "Entschaerfen in:";
+// Easter Egg (Sternschnuppe fangen)
+const char* eeInfo1L1      = "Oh, eine        ";
+const char* eeInfo1L2      = "Sternschnuppe!  ";
+const char* eeInfo2L1      = "Schnell, sie     ";
+const char* eeInfo2L2      = "fliegt gleich ";  // Danach folgt das Stern-Icon
+const char* eeInfo3L1      = "Fang sie im     ";
+const char* eeInfo3L2      = "richtigen Moment";
+const char* eeInfo4L1      = "und wuensch Dir ";
+const char* eeInfo4L2      = "was Schoenes!   ";
+const char* eePrepL1       = "Sie kommt in:   ";
 const char* eePrepSec      = " Sekunden";
-const char* eeRememberL1   = "Merk dir die    ";
-const char* eeRememberL2   = "Zeit!           ";
+const char* eeRememberL1   = "Zaehl mit und   ";
+const char* eeRememberL2   = "merk die Zeit!  ";
 const char* eeCountdown3   = "3...            ";
 const char* eeCountdown2   = "2...            ";
 const char* eeCountdown1   = "1...            ";
-const char* eeBeep         = "BEEP!           ";
-const char* eeBoomL1       = "BOOM! ";          // Danach Bomben-Icon und " BOOM!"
-const char* eeBoomL1End    = " BOOM!";
-const char* eeTooSlow      = "Zu langsam!     ";
-const char* eeDiff         = "Abw.: ";
+const char* eeBeep         = "Los geht's!     ";
+const char* eeBoomL1       = "Schade, ";        // Danach Stern-Icon und " weg!"
+const char* eeBoomL1End    = " weg!";
+const char* eeTooSlow      = "Zu langsam :(   ";
+const char* eeDiff         = "Um ";            // ergibt z.B. "Um 200 ms"
 const char* eeMs           = " ms";
-const char* eeTooEarly     = "-> Zu frueh!    ";
-const char* eeTooLate      = "-> Zu spaet!    ";
-const char* eePerfect      = "-> PERFEKT!     ";
-const char* eeDefusedL1    = "ENTSCHAERFT!    ";
-const char* eeSavedL2      = "Welt gerettet:-)";
-const char* eeInaccurate   = "Zu ungenau!     ";
+const char* eeTooEarly     = "zu frueh dran!  ";
+const char* eeTooLate      = "zu spaet dran!  ";
+const char* eePerfect      = "genau richtig!  ";
+const char* eeDefusedL1    = "Gefangen!       ";
+const char* eeSavedL2      = "Wuensch Dir was!";
+const char* eeInaccurate   = "Fast erwischt!  ";
 
 // Einladung (Seiten 1-11). Namen/Alter kommen aus HOST/GUEST/AGE oben.
 // TODO: Datum, Uhrzeit, Ort und Zusage-Frist noch mit echten Werten fuellen!
@@ -120,7 +124,7 @@ byte dinoSprite[8]    = { B00111, B00101, B00111, B10110, B11111, B01010, B01010
 byte cactus1Sprite[8] = { B00000, B00100, B10100, B10101, B11101, B00111, B00100, B00100 };
 byte cactus2Sprite[8] = { B00100, B01110, B00100, B00100, B01110, B00100, B00100, B00100 };
 byte rocketSprite[8]  = { B00000, B00100, B01110, B01010, B01010, B11111, B10101, B00000 };
-byte bombSprite[8]    = { B00010, B00100, B01110, B11111, B11111, B11111, B01110, B00000 };
+byte starSprite[8]    = { B00100, B00100, B10101, B01110, B01110, B10101, B00100, B00100 }; // Sternschnuppe (Easter Egg)
 // Feuerwerk-Sprites (Slots 5-7)
 byte fwTrail[8]       = { B00000, B00100, B00100, B00100, B00100, B00100, B00000, B00000 }; // Aufsteigende Rakete
 byte fwBurst[8]       = { B00100, B10101, B01110, B11011, B01110, B10101, B00100, B00000 }; // Explosions-Stern
@@ -198,12 +202,10 @@ void playVictoryJingle() {
   delay(100); tone(buzzerPin, 1047, 400);
 }
 
-void playExplosion() {
-  for (int i = 0; i < 3; i++) {
-    tone(buzzerPin, 100, 150); delay(150);
-    tone(buzzerPin, 50, 150); delay(150);
-  }
-  tone(buzzerPin, 30, 500);
+// Sanftes "knapp daneben" (Sternschnuppe verpasst) - zwei absteigende Toene
+void playMiss() {
+  tone(buzzerPin, 392, 150); delay(180); // G
+  tone(buzzerPin, 262, 300); delay(320); // C tiefer
 }
 
 
@@ -220,7 +222,7 @@ void setup() {
   lcd.createChar(1, cactus1Sprite);
   lcd.createChar(2, cactus2Sprite);
   lcd.createChar(3, rocketSprite);
-  lcd.createChar(4, bombSprite);
+  lcd.createChar(4, starSprite);
   lcd.createChar(5, fwTrail);
   lcd.createChar(6, fwBurst);
   lcd.createChar(7, fwSpark);
@@ -569,7 +571,7 @@ void showGameStart() {
 }
 
 // =====================================================================
-// --- EASTER EGG (BOMB DEFUSAL) ---
+// --- EASTER EGG (STERNSCHNUPPE FANGEN) ---
 // =====================================================================
 void eeIntro() {
   if (eePage == 0) {
@@ -577,7 +579,7 @@ void eeIntro() {
     lcd.setCursor(0, 1); lcd.print(eeInfo1L2);
   } else if (eePage == 1) {
     lcd.setCursor(0, 0); lcd.print(eeInfo2L1);
-    lcd.setCursor(0, 1); lcd.print(eeInfo2L2); lcd.write(byte(4)); // Bomb Icon
+    lcd.setCursor(0, 1); lcd.print(eeInfo2L2); lcd.write(byte(4)); // Stern-Icon
   } else if (eePage == 2) {
     lcd.setCursor(0, 0); lcd.print(eeInfo3L1);
     lcd.setCursor(0, 1); lcd.print(eeInfo3L2);
@@ -636,7 +638,7 @@ void eeResult() {
   if (pressTime == 999999) {
     lcd.setCursor(0, 0); lcd.print(eeBoomL1); lcd.write(byte(4)); lcd.print(eeBoomL1End);
     lcd.setCursor(0, 1); lcd.print(eeTooSlow);
-    playExplosion();
+    playMiss();
   } else {
     long diff = (long)pressTime - (long)targetTime;
     unsigned long absDiff = abs(diff);
@@ -644,20 +646,21 @@ void eeResult() {
     lcd.setCursor(0, 0); lcd.print(eeDiff); lcd.print(absDiff); lcd.print(eeMs);
     lcd.setCursor(0, 1);
 
-    if (diff < 0) lcd.print(eeTooEarly);
-    else if (diff > 0) lcd.print(eeTooLate);
-    else lcd.print(eePerfect);
+    if (absDiff <= CATCH_TOLERANCE) lcd.print(eePerfect); // im Trefferfenster -> positiv
+    else if (diff < 0) lcd.print(eeTooEarly);
+    else lcd.print(eeTooLate);
 
     delay(2500); lcd.clear();
 
-    if (absDiff <= 500) {
+    if (absDiff <= CATCH_TOLERANCE) {
       lcd.setCursor(0, 0); lcd.print(eeDefusedL1);
+      lcd.setCursor(14, 0); lcd.write(byte(4)); // kleiner Stern als Belohnung
       lcd.setCursor(0, 1); lcd.print(eeSavedL2);
       playVictoryJingle();
     } else {
       lcd.setCursor(0, 0); lcd.print(eeBoomL1); lcd.write(byte(4)); lcd.print(eeBoomL1End);
       lcd.setCursor(0, 1); lcd.print(eeInaccurate);
-      playExplosion();
+      playMiss();
     }
   }
   delay(3000); lcd.clear(); bombStarted = false; eeActive = false; gameMode = 1;
