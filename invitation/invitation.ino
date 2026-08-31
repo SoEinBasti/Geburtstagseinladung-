@@ -1,5 +1,7 @@
-// Version 1.5
-// Deutsche Uebersetzung + Namen (Thea laedt Emilia ein) + Intro-Feuerwerk + Feuerwerk-Finale
+// Version 2.0
+// Namen/Alter zentral (HOST/GUEST/AGE) + Herz-Sprite + Alters-Seite + WhatsApp-Kontakt + persoenliche Laufschrift
+// Intro-Feuerwerk + Highscore-Feuerwerk endet mit Easter-Egg-Hinweis (Laufschrift)
+// Highscore wird bei jedem Flash zurueckgesetzt (Build-Kennung in EEPROM 2-3)
 // Hinweis: HD44780-Display kann keine Umlaute -> bewusst ae/oe/ue/ss verwendet
 //
 // Langer Druck (20 Sekunden) im Highscore-Screen = Loescht den Highscore
@@ -23,7 +25,7 @@
 // LCD VSS: GND
 // LCD VDD: 5V
 // LCD V0: Center pin of a potentiometer (outer pins to 5V & GND)
-// LCD A:  5V (ideally with a 220 Ohm resistor)
+// LCD A:  5V direkt (Vorwiderstand fuer die Hintergrundbeleuchtung ist onboard)
 // LCD K:  GND
 
 #include <LiquidCrystal.h>
@@ -36,10 +38,15 @@
 // KEINE Umlaute verwenden (Display kann sie nicht) -> ae/oe/ue/ss.
 // =====================================================================
 
+// >>> PRO BAUSATZ NUR DIESE DREI ZEILEN ANPASSEN <<<
+#define HOST   "Thea"      // Geburtstagskind (laedt ein)
+#define GUEST  "Emilia"    // eingeladener Gast
+#define AGE    "9"         // Alter, das gefeiert wird
+
 // Hauptspiel & Menues
 const char* txtTitle       = "   DINO RUN   ";
-const char* txtNamesAlt1   = "Von Thea        "; // Namensanzeige, wechselnd 1
-const char* txtNamesAlt2   = "Fuer Emilia     "; // Namensanzeige, wechselnd 2
+// Easter-Egg-Hinweis - erscheint als Belohnung im Highscore-Feuerwerk (Laufschrift)
+const char* txtEggHint     = "Versuch doch mal beim Spielstart den Knopf 2 Sek zu halten und schau was passiert...";
 const char* txtLevelUp     = "!!! LEVEL ";
 const char* txtLevelUpEnd  = " !!!";
 const char* txtBestScore   = "BESTE: ";
@@ -80,14 +87,10 @@ const char* eeDefusedL1    = "ENTSCHAERFT!    ";
 const char* eeSavedL2      = "Welt gerettet:-)";
 const char* eeInaccurate   = "Zu ungenau!     ";
 
-// Einladung (Seiten 1-7)
+// Einladung (Seiten 1-11). Namen/Alter kommen aus HOST/GUEST/AGE oben.
 // TODO: Datum, Uhrzeit, Ort und Zusage-Frist noch mit echten Werten fuellen!
 const char* invPage1L1     = "Einladung zur   ";
 const char* invPage1L2     = "Geburtstagsparty";
-const char* invPage2Name1  = "Von: Thea       "; // Seite 2, Zustand A oben
-const char* invPage2Name2  = "Fuer: Emilia    "; // Seite 2, Zustand B oben
-const char* invPage2Name1B = "<3 <3 <3        "; //           Zustand A unten
-const char* invPage2Name2B = "<3 <3 <3        "; //           Zustand B unten
 const char* invPage3Date   = "25.08. um 08:00 "; // TODO: echtes Datum + Uhrzeit
 const char* invPage3Scroll = "      Wir holen Dich ab!   "; // Lauftext
 const char* invPage4L1     = "Wir gehen ins   ";
@@ -99,6 +102,10 @@ const char* invPage6L1     = "Endet gegen     ";
 const char* invPage6L2     = "14:00 Uhr       "; // TODO: echte End-Uhrzeit
 const char* invPage7L1     = "Bitte Zusage bis";
 const char* invPage7L2     = "10.08.          "; // TODO: echte Zusage-Frist
+const char* invPage8L1     = "WhatsApp Zusage:"; // Kontakt-Seite (genau 16 Zeichen)
+const char* invWhatsApp    = "0170-2931131";     // TODO: echte Nummer pruefen
+// Persoenliche Abschluss-Botschaft (frei anpassbar) - laeuft als Laufschrift
+const char* invPersonalScroll = "      Ich freu mich riesig auf Dich!   ";
 
 
 // =====================================================================
@@ -118,6 +125,10 @@ byte bombSprite[8]    = { B00010, B00100, B01110, B11111, B11111, B11111, B01110
 byte fwTrail[8]       = { B00000, B00100, B00100, B00100, B00100, B00100, B00000, B00000 }; // Aufsteigende Rakete
 byte fwBurst[8]       = { B00100, B10101, B01110, B11011, B01110, B10101, B00100, B00000 }; // Explosions-Stern
 byte fwSpark[8]       = { B00000, B00100, B00000, B01010, B00000, B00100, B00000, B00000 }; // Verstreute Funken
+// Herz fuer die Einladung. Teilt sich Slot 7 mit fwSpark:
+//   - nach dem Intro-Feuerwerk wird Slot 7 auf das Herz umgestellt (setup)
+//   - showFireworks() laedt vor jedem Feuerwerk kurz die Funken zurueck
+byte heartSprite[8]   = { B00000, B01010, B11111, B11111, B11111, B01110, B00100, B00000 };
 
 // --- GLOBAL VARIABLES ---
 int gameMode = 0;          // 0: Invite, 1: Start, 2: Play, 3: LevelUp, 4: GameOver, 5: Highscore, 6-9: EasterEgg
@@ -217,14 +228,35 @@ void setup() {
   // Seed random generator with analog noise
   randomSeed(analogRead(0));
 
-  // Read saved data from EEPROM
-  highscore = EEPROM.read(0);
-  if (highscore == 255) highscore = 0; // 255 is the default value of an empty EEPROM
-  bestLevel = EEPROM.read(1);
-  if (bestLevel == 255) bestLevel = 1;
+  // Build-Kennung aus Compile-Zeit: aendert sich bei jedem Kompilieren.
+  // Passt die in EEPROM (Adresse 2-3) gespeicherte Kennung nicht -> frisch
+  // geflasht -> Highscore zuruecksetzen. So startet jeder neue Bausatz sauber.
+  const char* bid = __DATE__ " " __TIME__;
+  uint16_t buildStamp = 0;
+  for (const char* p = bid; *p; p++) buildStamp = buildStamp * 31 + (uint8_t)(*p);
+  uint16_t storedStamp = ((uint16_t)EEPROM.read(2) << 8) | EEPROM.read(3);
+
+  if (storedStamp != buildStamp) {
+    // Neue Firmware -> Highscore + Kennung neu schreiben
+    highscore = 0;
+    bestLevel = 1;
+    EEPROM.write(0, 0);
+    EEPROM.write(1, 1);
+    EEPROM.write(2, buildStamp >> 8);
+    EEPROM.write(3, buildStamp & 0xFF);
+  } else {
+    // Gleiche Firmware -> gespeicherten Highscore laden
+    highscore = EEPROM.read(0);
+    if (highscore == 255) highscore = 0; // 255 = leeres EEPROM
+    bestLevel = EEPROM.read(1);
+    if (bestLevel == 255) bestLevel = 1;
+  }
 
   playMarioIntro();
-  showIntro();   // Feuerwerk + "Thea feiert Geburtstag!" vor der Einladung
+  showIntro();   // Feuerwerk + "<HOST> feiert Geburtstag!" vor der Einladung
+
+  // Intro-Feuerwerk vorbei -> Slot 7 von Funken auf Herz umstellen (fuer die Einladung)
+  lcd.createChar(7, heartSprite);
 }
 
 // =====================================================================
@@ -505,11 +537,11 @@ void showGameOver() {
 void showGameStart() {
   lcd.setCursor(0, 0); lcd.print(txtTitle); lcd.write(byte(0));
 
-  // Blinking names every 2 seconds
+  // Untere Zeile wechselt alle 2s zwischen Absender und Empfaenger
   if ((millis() / 2000) % 2 == 0) {
-    lcd.setCursor(0, 1); lcd.print(txtNamesAlt1);
+    lcd.setCursor(0, 1); printPadded("Von " HOST);
   } else {
-    lcd.setCursor(0, 1); lcd.print(txtNamesAlt2);
+    lcd.setCursor(0, 1); printPadded("Fuer " GUEST);
   }
 
   // Activate Easter Egg if button held for 2 seconds
@@ -632,7 +664,7 @@ void eeResult() {
 }
 
 // =====================================================================
-// --- FIREWORKS ANIMATION (Einladungs-Finale) ---
+// --- FIREWORKS ANIMATION (Highscore-Belohnung, zeigt den Gast) ---
 // =====================================================================
 
 // Eine einzelne Rakete: steigt in der Spalte 'col' auf und zerplatzt oben.
@@ -669,13 +701,14 @@ void launchFirework(int col) {
 
 // Komplette Feuerwerks-Show mit Abschlussbotschaft.
 void showFireworks() {
+  lcd.createChar(7, fwSpark);  // Slot 7 kurz von Herz auf Funken zuruecksetzen
   lcd.clear();
   int cols[] = {4, 11, 8};                    // Raketen nacheinander an 3 Spalten
   for (int i = 0; i < 3; i++) launchFirework(cols[i]);
 
-  // Zwischen-Botschaft mit Fanfare
+  // Zwischen-Botschaft mit Fanfare (Highscore-Kontext, kein Geburtstagsgruss)
   lcd.clear();
-  lcd.setCursor(0, 0); lcd.print("  Alles Gute!   ");
+  lcd.setCursor(0, 0); printCentered("HIGHSCORE!");
   lcd.setCursor(0, 1); lcd.print(" *  .  *  +  *  ");
   playVictoryJingle();
   delay(400);
@@ -684,10 +717,11 @@ void showFireworks() {
   launchFirework(3);
   launchFirework(12);
   lcd.clear();
-  lcd.setCursor(0, 0); lcd.print("   Fuer Dich    ");
-  lcd.setCursor(0, 1); lcd.print("    Emilia!     ");
+
+  // Belohnung: Easter-Egg-Hinweis als Laufschrift (statt "Fuer Dich [GAST]")
+  lcd.setCursor(0, 0); printCentered("Geheim-Tipp!");
   playPokemonTriumph();
-  delay(1800);
+  scrollOnce(txtEggHint, 1, 200);
   lcd.clear();
 }
 
@@ -699,11 +733,63 @@ void showIntro() {
   for (int i = 0; i < 3; i++) launchFirework(cols[i]);
 
   lcd.clear();
-  lcd.setCursor(0, 0); lcd.print("Thea feiert     ");
-  lcd.setCursor(0, 1); lcd.print("Geburtstag!     ");
+  lcd.setCursor(0, 0); printCentered(HOST " feiert");
+  lcd.setCursor(0, 1); printCentered("Geburtstag!");
   playVictoryJingle();
   delay(2500);
   lcd.clear();
+}
+
+// =====================================================================
+// --- DISPLAY-HELFER ---
+// =====================================================================
+
+// Schreibt s und fuellt den Rest der 16-Zeichen-Zeile mit Leerzeichen auf.
+// So werden alte Zeichen sicher ueberschrieben - unabhaengig von der Namenslaenge.
+void printPadded(const char* s) {
+  lcd.print(s);
+  for (int i = strlen(s); i < 16; i++) lcd.print(" ");
+}
+
+// Zentriert s in der 16-Zeichen-Zeile (Annahme: s ist hoechstens 16 Zeichen).
+void printCentered(const char* s) {
+  int len = strlen(s);
+  int left = (16 - len) / 2;
+  if (left < 0) left = 0;
+  for (int i = 0; i < left; i++) lcd.print(" ");
+  lcd.print(s);
+  for (int i = left + len; i < 16; i++) lcd.print(" ");
+}
+
+// Herzchen-Reihe in der unteren Zeile (nutzt Slot 7 = Herz waehrend der Einladung).
+void printHearts() {
+  for (int c = 2; c < 16; c += 3) { lcd.setCursor(c, 1); lcd.write(byte(7)); }
+}
+
+// Endlos-Laufschrift ab der aktuellen Cursor-Position (16 sichtbare Zeichen).
+// 450 ms pro Schritt = zuegig lesbar.
+void printScroll(const char* text) {
+  String t = text;
+  int pos = (millis() / 450) % t.length();
+  String out = t.substring(pos) + t.substring(0, pos);
+  lcd.print(out.substring(0, 16));
+}
+
+// Scrollt text EINMAL durch die angegebene Zeile (blockierend).
+// Laeuft von rechts rein und links wieder raus; Knopfdruck bricht frueh ab.
+void scrollOnce(const char* text, int row, int stepMs) {
+  String t = "                ";  // 16 Zeichen Vorlauf
+  t += text;
+  t += "                ";        // Nachlauf zum sauberen Rauslaufen
+  int total = t.length();
+  for (int pos = 0; pos + 16 <= total; pos++) {
+    lcd.setCursor(0, row);
+    lcd.print(t.substring(pos, pos + 16));
+    for (int w = 0; w < stepMs; w += 10) {
+      if (digitalRead(buttonPin) == LOW) return; // frueh abbrechen
+      delay(10);
+    }
+  }
 }
 
 // =====================================================================
@@ -715,27 +801,29 @@ void showInvitation() {
     lcd.setCursor(0, 1); lcd.print(invPage1L2);
   }
   else if (invitationPage == 2) {
-    if ((millis() / 2000) % 2 == 0) {
-      lcd.setCursor(0, 0); lcd.print(invPage2Name1);
-      lcd.setCursor(0, 1); lcd.print(invPage2Name1B);
-    } else {
-      lcd.setCursor(0, 0); lcd.print(invPage2Name2);
-      lcd.setCursor(0, 1); lcd.print(invPage2Name2B);
-    }
+    // Absender - eigene Seite, damit sie beim Blaettern nicht uebersprungen wird
+    lcd.setCursor(0, 0); lcd.print("Von: " HOST);
+    printHearts();
   }
   else if (invitationPage == 3) {
-    lcd.setCursor(0, 0); lcd.print(invPage3Date);
-    // Create scrolling effect using the String object
-    String lText = invPage3Scroll;
-    int pos = (millis() / 1000) % lText.length();
-    String displayStr = lText.substring(pos) + lText.substring(0, pos);
-    lcd.setCursor(0, 1); lcd.print(displayStr.substring(0, 16));
+    // Empfaenger - eigene Seite direkt nach dem Absender
+    lcd.setCursor(0, 0); lcd.print("Fuer: " GUEST);
+    printHearts();
   }
   else if (invitationPage == 4) {
+    // Alters-Seite
+    lcd.setCursor(0, 0); printCentered(HOST " wird");
+    lcd.setCursor(0, 1); printCentered(AGE " Jahre! :)");
+  }
+  else if (invitationPage == 5) {
+    lcd.setCursor(0, 0); lcd.print(invPage3Date);
+    lcd.setCursor(0, 1); printScroll(invPage3Scroll);
+  }
+  else if (invitationPage == 6) {
     lcd.setCursor(0, 0); lcd.print(invPage4L1);
     lcd.setCursor(0, 1); lcd.print(invPage4L2);
   }
-  else if (invitationPage == 5) {
+  else if (invitationPage == 7) {
     lcd.setCursor(0, 0); lcd.print(invPage5L1);
     // Blinking logic
     if ((millis() / 500) % 2 == 0) {
@@ -744,13 +832,23 @@ void showInvitation() {
       lcd.setCursor(0, 1); lcd.print(invPage5L2Hide);
     }
   }
-  else if (invitationPage == 6) {
+  else if (invitationPage == 8) {
     lcd.setCursor(0, 0); lcd.print(invPage6L1);
     lcd.setCursor(0, 1); lcd.print(invPage6L2);
   }
-  else if (invitationPage == 7) {
+  else if (invitationPage == 9) {
     lcd.setCursor(0, 0); lcd.print(invPage7L1);
     lcd.setCursor(0, 1); lcd.print(invPage7L2);
+  }
+  else if (invitationPage == 10) {
+    // Kontakt-Seite: Nummer statisch, damit sie gut ablesbar bleibt
+    lcd.setCursor(0, 0); lcd.print(invPage8L1);
+    lcd.setCursor(0, 1); printCentered(invWhatsApp);
+  }
+  else if (invitationPage == 11) {
+    // Persoenlicher Abschluss: Laufschrift oben, Herzchen darunter
+    lcd.setCursor(0, 0); printScroll(invPersonalScroll);
+    printHearts();
   }
 
   // Navigation
@@ -758,7 +856,7 @@ void showInvitation() {
     tone(buzzerPin, 1000, 50);
     invitationPage++;
     lcd.clear();
-    if (invitationPage > 7) { showFireworks(); gameMode = 1; }
+    if (invitationPage > 11) { gameMode = 1; }  // Einladung zu Ende -> direkt ins Spiel, kein Feuerwerk hier
     delay(300);
   }
 }
