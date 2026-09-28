@@ -1,4 +1,5 @@
-// Version 2.2
+// Version 2.3
+// Geheim-Tipp-Laufschrift langsamer (280 ms) gegen LCD-Artefakte
 // Finale Party-Daten: 24.10. um 13:00, Treffpunkt Ludwigshafener Str. 17B, Zusage bis 16.10.
 // Namen/Alter zentral (HOST/GUEST/AGE) + Herz-Sprite + Alters-Seite + WhatsApp-Kontakt + persoenliche Laufschrift
 // Intro-Feuerwerk + Highscore-Feuerwerk endet mit Easter-Egg-Hinweis (Laufschrift)
@@ -724,7 +725,7 @@ void showFireworks() {
   // Belohnung: Easter-Egg-Hinweis als Laufschrift (statt "Fuer Dich [GAST]")
   lcd.setCursor(0, 0); printCentered("Geheim-Tipp!");
   playPokemonTriumph();
-  scrollOnce(txtEggHint, 1, 200);
+  scrollOnce(txtEggHint, 1, 280);
   lcd.clear();
 }
 
