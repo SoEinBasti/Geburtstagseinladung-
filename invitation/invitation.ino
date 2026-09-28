@@ -1,4 +1,5 @@
-// Version 2.1
+// Version 2.2
+// Finale Party-Daten: 24.10. um 13:00, Treffpunkt Ludwigshafener Str. 17B, Zusage bis 16.10.
 // Namen/Alter zentral (HOST/GUEST/AGE) + Herz-Sprite + Alters-Seite + WhatsApp-Kontakt + persoenliche Laufschrift
 // Intro-Feuerwerk + Highscore-Feuerwerk endet mit Easter-Egg-Hinweis (Laufschrift)
 // Easter Egg: "Sternschnuppe fangen" (Timing-Spiel, Wunsch frei) statt Bombe
@@ -92,20 +93,19 @@ const char* eeSavedL2      = "Wuensch Dir was!";
 const char* eeInaccurate   = "Fast erwischt!  ";
 
 // Einladung (Seiten 1-11). Namen/Alter kommen aus HOST/GUEST/AGE oben.
-// TODO: Datum, Uhrzeit, Ort und Zusage-Frist noch mit echten Werten fuellen!
 const char* invPage1L1     = "Einladung zur   ";
 const char* invPage1L2     = "Geburtstagsparty";
-const char* invPage3Date   = "25.08. um 08:00 "; // TODO: echtes Datum + Uhrzeit
-const char* invPage3Scroll = "      Wir holen Dich ab!   "; // Lauftext
+const char* invPage3Date   = "24.10. um 13:00 "; // Datum + Startuhrzeit
+const char* invPage3Scroll = "   Treffpunkt bei uns: Ludwigshafener Str. 17B   "; // Lauftext (kein Abholen mehr)
 const char* invPage4L1     = "Wir gehen ins   ";
 const char* invPage4L2     = "SCHWIMMBAD      "; // TODO: Ort anpassen falls anders
 const char* invPage5L1     = "Badesachen      ";
 const char* invPage5L2Show = "NICHT vergessen!"; // Blink-Effekt (sichtbar)
 const char* invPage5L2Hide = "      vergessen!"; // Blink-Effekt (versteckt)
 const char* invPage6L1     = "Endet gegen     ";
-const char* invPage6L2     = "14:00 Uhr       "; // TODO: echte End-Uhrzeit
+const char* invPage6L2     = "19:00 Uhr       "; // offen, ca. 19 Uhr
 const char* invPage7L1     = "Bitte Zusage bis";
-const char* invPage7L2     = "10.08.          "; // TODO: echte Zusage-Frist
+const char* invPage7L2     = "16.10.          "; // Zusage-Frist
 const char* invPage8L1     = "WhatsApp Zusage:"; // Kontakt-Seite (genau 16 Zeichen)
 const char* invWhatsApp    = "0170-2931131";     // TODO: echte Nummer pruefen
 // Persoenliche Abschluss-Botschaft (frei anpassbar) - laeuft als Laufschrift
